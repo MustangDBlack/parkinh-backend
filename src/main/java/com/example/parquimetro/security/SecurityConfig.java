@@ -1,4 +1,4 @@
-package com.blackkode.parkinh.security;
+package com.example.parquimetro.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,31 +17,28 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
-    // 1. Configuramos la máquina encriptadora de contraseñas
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(); 
     }
 
-    // 2. Configuramos las puertas (Filtros)
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable()) // Desactivamos CSRF para que React pueda enviar POSTs
-            .cors(Customizer.withDefaults()) // Activa el soporte de CORS
+            .csrf(csrf -> csrf.disable())
+            .cors(Customizer.withDefaults())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // 🔓 CLAVE: Permite la petición previa OPTIONS del navegador
-                .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll() // Puertas abiertas
-                .anyRequest().permitAll() // Dejamos el resto abierto temporalmente
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
+                .anyRequest().permitAll()
             );
         return http.build();
     }
 
-    // 3. Fuente de configuración CORS explícita para producción
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("https://parkinh.blackkode.com.ar")); // Tu frontend oficial
+        configuration.setAllowedOrigins(List.of("https://parkinh.blackkode.com.ar"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
