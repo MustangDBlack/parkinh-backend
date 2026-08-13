@@ -27,23 +27,26 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // 1. Activa CORS buscando automáticamente el bean corsConfigurationSource
             .cors(Customizer.withDefaults())
-            // 2. Desactiva CSRF (necesario para APIs REST)
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                // 3. Permite todas las peticiones OPTIONS de forma global
+                // 1. Permitir preflights de CORS
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // 4. Rutas públicas de usuarios y webhooks
-                .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
+                // 2. Rutas públicas de usuarios y webhooks
+                .requestMatchers("/api/usuarios/**").permitAll()
                 
-                // 🚀 5. Permitir que cualquiera pueda ver el mapa de cocheras (Evita el error 403)
-                .requestMatchers(HttpMethod.GET, "/api/cocheras").permitAll()
+                // 3. Rutas de cocheras (Lectura y operaciones de entrada/salida)
+                .requestMatchers("/api/cocheras/**").permitAll()
                 
-                // 6. Todo lo demás protegido
-                .anyRequest().authenticated()
+                // 4. Rutas de reservas e historial (Para que el frontend pueda consultarlas)
+                .requestMatchers("/api/reservas/**").permitAll()
+                
+                // 5. Rutas de pagos y pasarela digital de Mercado Pago
+                .requestMatchers("/api/mercado-pago/**").permitAll()
+                
+                // 6. Cualquier otra cosa por si acaso
+                .anyRequest().permitAll()
             );
         return http.build();
     }
@@ -52,22 +55,19 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Orígenes exactos
         configuration.setAllowedOrigins(Arrays.asList(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
         ));
         
-        // Métodos explícitos
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         
-        // Cabeceras (Agregamos explícitamente las que React suele enviar)
         configuration.setAllowedHeaders(Arrays.asList(
             "Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"
         ));
         
         configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L); // Cachea la respuesta preflight 1 hora
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
