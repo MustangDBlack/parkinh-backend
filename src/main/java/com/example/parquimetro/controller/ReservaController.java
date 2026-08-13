@@ -19,8 +19,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/reservas")
-// 🚀 CAMBIO VITAL: Reemplazamos el "*" por los dominios permitidos
-@CrossOrigin(origins = {"https://parkinh.blackkode.com.ar", "http://localhost:5173"}, allowCredentials = "true")
 public class ReservaController {
 
     private final ReservaRepository repository;
@@ -29,11 +27,13 @@ public class ReservaController {
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
-    public ReservaController(ReservaRepository repository, ReservaService service) {
+    // 🚀 Inyectamos correctamente el token desde el entorno
+    public ReservaController(ReservaRepository repository, 
+                             ReservaService service, 
+                             @Value("${mercadopago.access.token}") String mpAccessToken) {
         this.repository = repository;
         this.service = service;
-        // Ojo aquí: Este token quemado deberías pasarlo a variable de entorno luego
-        MercadoPagoConfig.setAccessToken("APP_USR-7c349921-cc5a-4fdd-822f-1098451bef56");
+        MercadoPagoConfig.setAccessToken(mpAccessToken);
     }
 
     @GetMapping
@@ -46,10 +46,6 @@ public class ReservaController {
         return repository.findByUsuarioUsernameOrderByHoraEntradaDesc(username);
     }
 
-    /**
-     * Calcula la multa de forma exponencial ($200, $400, $800, $1600...)
-     * y genera la orden de pago en Mercado Pago desglosando la multa y la estadía.
-     */
     @PutMapping("/{id}/pagar-deuda")
     public String pagarDeudaConMulta(@PathVariable Long id) {
         Reserva reserva = repository.findById(id)
@@ -63,7 +59,6 @@ public class ReservaController {
             LocalDateTime ahora = LocalDateTime.now();
             LocalDateTime horaFin = reserva.getHoraFinEsperada();
             
-            // 1. Calcular multa progresiva por exceso de tiempo
             double montoMulta = 0.0;
             if (horaFin != null && ahora.isAfter(horaFin)) {
                 long minutosExceso = Duration.between(horaFin, ahora).toMinutes();
@@ -73,12 +68,10 @@ public class ReservaController {
                 }
             }
 
-            // 2. Tarifa base del ticket original
             double montoBase = reserva.getMontoTotal() != null ? reserva.getMontoTotal().doubleValue() : 500.0;
 
             List<PreferenceItemRequest> items = new ArrayList<>();
 
-            // Item Base
             items.add(PreferenceItemRequest.builder()
                     .id("BASE-" + id)
                     .title("Estacionamiento / Tarifa Base Cochera " + (reserva.getCochera() != null ? reserva.getCochera().getCodigo() : ""))
@@ -87,7 +80,6 @@ public class ReservaController {
                     .currencyId("ARS")
                     .build());
 
-            // Item Multa (Si corresponde)
             if (montoMulta > 0) {
                 items.add(PreferenceItemRequest.builder()
                         .id("MULTA-" + id)
@@ -116,6 +108,7 @@ public class ReservaController {
             return "{\"preferenceId\":\"" + preference.getId() + "\"}";
 
         } catch (Exception e) {
+            System.err.println("❌ ERROR MP PAGAR DEUDA: " + e.getMessage());
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al procesar pago en Mercado Pago: " + e.getMessage());
         }
     }
@@ -154,6 +147,7 @@ public class ReservaController {
 
             return "{\"preferenceId\":\"" + preference.getId() + "\"}";
         } catch (Exception e) {
+            System.err.println("❌ ERROR MP SOLICITAR EXTENSION: " + e.getMessage());
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error con Mercado Pago: " + e.getMessage());
         }
     }
