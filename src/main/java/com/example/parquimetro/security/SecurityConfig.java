@@ -1,9 +1,10 @@
 package com.example.parquimetro.security;
 
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,37 +27,43 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults()) // Utiliza la configuración del CorsFilter de abajo
+            .cors(cors -> {}) // Delegado al CorsFilter de máxima prioridad
             .authorizeHttpRequests(auth -> auth
                 // Permitir explícitamente todas las peticiones OPTIONS (Preflight de CORS)
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // Rutas públicas
+                // Rutas públicas de la API
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
                 
-                // Resto protegido
+                // Todo lo demás exige autenticación
                 .anyRequest().authenticated()
             );
         return http.build();
     }
 
     @Bean
-    public CorsFilter corsFilter() {
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistration() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        CorsConfiguration configuration = new CorsConfiguration();
+        CorsConfiguration config = new CorsConfiguration();
         
-        // Dominios permitidos en producción y desarrollo local
-        configuration.setAllowedOrigins(List.of(
+        // Dominios permitidos (Producción y Local)
+        config.setAllowedOrigins(List.of(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
         ));
         
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
 
-        source.registerCorsConfiguration("/**", configuration);
-        return new CorsFilter(source);
+        source.registerCorsConfiguration("/**", config);
+        
+        CorsFilter corsFilter = new CorsFilter(source);
+        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(corsFilter);
+        
+        // 🚀 MÁXIMA PRIORIDAD: Se ejecuta antes que cualquier seguridad o filtro del sistema
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return bean;
     }
 }
