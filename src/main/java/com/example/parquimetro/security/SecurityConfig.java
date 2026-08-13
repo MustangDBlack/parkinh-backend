@@ -3,7 +3,6 @@ package com.example.parquimetro.security;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,15 +25,16 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults())
+            // 🚀 CAMBIO CLAVE: Enlazamos la configuración de CORS de forma explícita
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // 🔓 RUTAS PÚBLICAS: Login, Registro y Notificaciones de Mercado Pago
+                // Rutas públicas
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
                 
-                // 🔒 PRODUCCIÓN: Exige autenticación para acceder a cocheras, reservas, etc.
+                // Resto protegido
                 .anyRequest().authenticated()
             );
         return http.build();
@@ -44,7 +44,6 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Dominios permitidos (Local y Producción)
         configuration.setAllowedOrigins(List.of(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
