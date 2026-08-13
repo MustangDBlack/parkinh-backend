@@ -19,7 +19,7 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(); 
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
@@ -29,8 +29,13 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
+                // 🔓 RUTAS PÚBLICAS: Login, Registro y Notificaciones de Mercado Pago
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
-                .anyRequest().permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
+                
+                // 🔒 PRODUCCIÓN: Exige autenticación para acceder a cocheras, reservas, etc.
+                .anyRequest().authenticated()
             );
         return http.build();
     }
@@ -39,10 +44,10 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // 🚀 AQUÍ ESTÁ EL CAMBIO CLAVE: Se agregó el puerto de Vite local
+        // Dominios permitidos (Local y Producción)
         configuration.setAllowedOrigins(List.of(
             "https://parkinh.blackkode.com.ar",
-            "http://localhost:5173" 
+            "http://localhost:5173"
         ));
         
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));

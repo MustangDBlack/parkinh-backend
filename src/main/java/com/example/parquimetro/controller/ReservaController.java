@@ -2,10 +2,19 @@ package com.example.parquimetro.controller;
 
 import com.example.parquimetro.model.Reserva;
 import com.example.parquimetro.repository.ReservaRepository;
+import com.example.parquimetro.service.ReservaService;
+import com.mercadopago.MercadoPagoConfig;
+import com.mercadopago.client.preference.*;
+import com.mercadopago.resources.preference.Preference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -14,28 +23,33 @@ import java.util.List;
 public class ReservaController {
 
     private final ReservaRepository repository;
+    private final ReservaService service;
 
-    public ReservaController(ReservaRepository repository) {
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
+
+    public ReservaController(ReservaRepository repository, ReservaService service) {
         this.repository = repository;
+        this.service = service;
+        MercadoPagoConfig.setAccessToken("APP_USR-7c349921-cc5a-4fdd-822f-1098451bef56");
     }
 
-    // Ruta para obtener TODO el historial de tickets (Para el Dashboard del Admin)
     @GetMapping
     public List<Reserva> obtenerHistorial() {
-        // 🚀 CORRECCIÓN: Usamos el método optimizado para evitar saturar la base de datos
         return repository.findAllWithDetails(); 
     }
 
-    // 🚀 NUEVO: Obtener el HISTORIAL de un usuario específico
     @GetMapping("/usuario/{username}")
     public List<Reserva> obtenerHistorialUsuario(@PathVariable String username) {
         return repository.findByUsuarioUsernameOrderByHoraEntradaDesc(username);
     }
 
-    // 🚀 NUEVO: Endpoint para SALDAR LA DEUDA
-    // React llamará a este endpoint una vez que MercadoPago apruebe el pago de la multa.
+    /**
+     * 🚀 CORREGIDO: Calcula la multa de forma exponencial ($200, $400, $800, $1600...)
+     * y genera la orden de pago en Mercado Pago desglosando la multa y la estadía.
+     */
     @PutMapping("/{id}/pagar-deuda")
-    public Reserva pagarDeuda(@PathVariable Long id) {
+    public String pagarDeudaConMulta(@PathVariable Long id) {
         Reserva reserva = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reserva no encontrada"));
 
@@ -43,9 +57,111 @@ public class ReservaController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este ticket ya se encuentra pagado.");
         }
 
-        // Cambiamos el estado para liberar al usuario del bloqueo
-        reserva.setEstadoPago("PAGADO");
-        
-        return repository.save(reserva);
+        try {
+            LocalDateTime ahora = LocalDateTime.now();
+            LocalDateTime horaFin = reserva.getHoraFinEsperada();
+            
+            // 1. Calcular multa progresiva por exceso de tiempo
+            double montoMulta = 0.0;
+            if (horaFin != null && ahora.isAfter(horaFin)) {
+                long minutosExceso = Duration.between(horaFin, ahora).toMinutes();
+                long horasExcedidas = (long) Math.ceil(minutosExceso / 60.0);
+                if (horasExcedidas > 0) {
+                    montoMulta = 200.0 * Math.pow(2, horasExcedidas - 1);
+                }
+            }
+
+            // 2. Tarifa base del ticket original
+            double montoBase = reserva.getMontoTotal() != null ? reserva.getMontoTotal().doubleValue() : 500.0;
+
+            List<PreferenceItemRequest> items = new ArrayList<>();
+
+            // Item Base
+            items.add(PreferenceItemRequest.builder()
+                    .id("BASE-" + id)
+                    .title("Estacionamiento / Tarifa Base Cochera " + (reserva.getCochera() != null ? reserva.getCochera().getCodigo() : ""))
+                    .quantity(1)
+                    .unitPrice(new BigDecimal(montoBase))
+                    .currencyId("ARS")
+                    .build());
+
+            // Item Multa (Si corresponde)
+            if (montoMulta > 0) {
+                items.add(PreferenceItemRequest.builder()
+                        .id("MULTA-" + id)
+                        .title("Multa Progresiva por Exceso de Tiempo")
+                        .quantity(1)
+                        .unitPrice(new BigDecimal(montoMulta))
+                        .currencyId("ARS")
+                        .build());
+            }
+
+            PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
+                    .success(frontendUrl + "/pago-exitoso?reservaId=" + id)
+                    .pending(frontendUrl + "/pago-pendiente")
+                    .failure(frontendUrl + "/pago-fallido")
+                    .build();
+
+            PreferenceRequest preferenceRequest = PreferenceRequest.builder()
+                    .items(items)
+                    .backUrls(backUrls)
+                    .autoReturn("approved")
+                    .build();
+
+            PreferenceClient client = new PreferenceClient();
+            Preference preference = client.create(preferenceRequest);
+
+            return "{\"preferenceId\":\"" + preference.getId() + "\"}";
+
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al procesar pago en Mercado Pago: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/solicitar-extension")
+    public String solicitarExtension(@PathVariable Long id, @RequestParam int horas) {
+        try {
+            double precioPorHora = 500.0;
+            double montoAPagar = horas * precioPorHora;
+
+            PreferenceItemRequest itemRequest = PreferenceItemRequest.builder()
+                    .id("EXT-" + id + "-" + horas)
+                    .title("Prórroga Estacionamiento PARKINH - +" + horas + "hs")
+                    .quantity(1)
+                    .unitPrice(new BigDecimal(montoAPagar))
+                    .currencyId("ARS")
+                    .build();
+
+            List<PreferenceItemRequest> items = new ArrayList<>();
+            items.add(itemRequest);
+
+            PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
+                    .success(frontendUrl + "/pago-exitoso?reservaId=" + id + "&horas=" + horas)
+                    .pending(frontendUrl + "/pago-pendiente")
+                    .failure(frontendUrl + "/pago-fallido")
+                    .build();
+
+            PreferenceRequest preferenceRequest = PreferenceRequest.builder()
+                    .items(items)
+                    .backUrls(backUrls)
+                    .autoReturn("approved")
+                    .build();
+
+            PreferenceClient client = new PreferenceClient();
+            Preference preference = client.create(preferenceRequest);
+
+            return "{\"preferenceId\":\"" + preference.getId() + "\"}";
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error con Mercado Pago: " + e.getMessage());
+        }
+    }
+
+    @PutMapping("/{id}/confirmar-extension")
+    public Reserva confirmarExtension(@PathVariable Long id, @RequestParam int horas) {
+        try {
+            return service.extenderReserva(id, horas);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 }

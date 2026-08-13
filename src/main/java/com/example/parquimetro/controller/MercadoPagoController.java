@@ -7,6 +7,8 @@ import com.example.parquimetro.repository.UsuarioRepository;
 import com.example.parquimetro.service.CocheraService;
 import com.example.parquimetro.service.ReservaService;
 import com.example.parquimetro.service.MercadoPagoService;
+import com.mercadopago.client.payment.PaymentClient;
+import com.mercadopago.resources.payment.Payment;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,7 +44,7 @@ public class MercadoPagoController {
             @RequestParam String tipoPase,
             @RequestParam String turno,
             @RequestParam BigDecimal monto, 
-            @RequestParam String email, // 🚀 NUEVO: Recibimos el email desde React
+            @RequestParam String email, 
             @RequestParam(required = false) String username) { 
         
         try {
@@ -55,18 +57,21 @@ public class MercadoPagoController {
                 return ResponseEntity.badRequest().body("Error: El lugar ya fue ocupado por alguien más.");
             }
 
-            String referenciaExterna = "cochera:" + codigo;
+            // Referencia externa única vinculada al código de cochera y patente
+            String referenciaExterna = codigo + "_" + patente.replace(" ", "").toUpperCase();
             
-            // 🚀 PASAMOS EL EMAIL AL SERVICIO
+            // 1. Creamos la preferencia en Mercado Pago
             String idPreferencia = mercadoPagoService.crearPreferenciaPago(codigo, monto, referenciaExterna, email);
             
+            // 2. Registramos la reserva como PENDIENTE (sin bloquear la cochera físicamente aún, o dejándola en espera)
             Reserva nuevaReserva = new Reserva();
             nuevaReserva.setCochera(cochera);
             nuevaReserva.setPatente(patente.replace(" ", "").toUpperCase());
             nuevaReserva.setTipoPase(tipoPase);
             nuevaReserva.setTurno(turno);
             nuevaReserva.setMontoTotal(monto.doubleValue()); 
-            nuevaReserva.setMetodoPago("MERCADO_PAGO"); 
+            nuevaReserva.setMetodoPago("MERCADO_PAGO");
+            nuevaReserva.setEstadoPago("PENDIENTE"); 
             
             if (username != null && !username.trim().isEmpty()) {
                 Optional<Usuario> userOpt = usuarioRepository.findByUsername(username);
@@ -74,11 +79,7 @@ public class MercadoPagoController {
             }
             
             reservaService.crearReserva(nuevaReserva);
-
-            cochera.setOcupado(true);
-            cocheraService.crearCochera(cochera); 
             
-            // 🚀 Retornamos el ID de la preferencia para que React renderice el botón
             return ResponseEntity.ok(idPreferencia);
 
         } catch (Exception e) {
@@ -87,9 +88,50 @@ public class MercadoPagoController {
         }
     }
 
+    /**
+     * 🚀 WEBHOOK REAL: Recibe las notificaciones de Mercado Pago cuando el pago se aprueba
+     */
     @PostMapping("/webhook")
+    @Transactional
     public ResponseEntity<?> recibirNotificacionPago(@RequestBody Map<String, Object> payload) {
-        System.out.println("🔔 WEBHOOK RECIBIDO DESDE MERCADO PAGO: \n" + payload);
-        return ResponseEntity.ok().build();
+        try {
+            System.out.println("🔔 WEBHOOK RECIBIDO DESDE MERCADO PAGO: " + payload);
+
+            String type = (String) payload.get("type");
+            if ("payment".equals(type)) {
+                Map<String, Object> data = (Map<String, Object>) payload.get("data");
+                if (data != null && data.containsKey("id")) {
+                    Long paymentId = Long.valueOf(data.get("id").toString());
+
+                    // Consultamos los detalles del pago directamente a la API de Mercado Pago
+                    PaymentClient paymentClient = new PaymentClient();
+                    Payment payment = paymentClient.get(paymentId);
+
+                    if ("approved".equals(payment.getStatus())) {
+                        String externalReference = payment.getExternalReference(); // Ej: "A1_AB123CD"
+                        
+                        if (externalReference != null && externalReference.contains("_")) {
+                            String[] partes = externalReference.split("_");
+                            String codigoCochera = partes[0];
+                            String patente = partes[1];
+
+                            // Ocupamos la cochera físicamente y actualizamos el estado del pago
+                            Cochera cochera = cocheraService.obtenerPorCodigo(codigoCochera);
+                            if (cochera != null) {
+                                cochera.setOcupado(true);
+                                cocheraService.crearCochera(cochera);
+                            }
+
+                            System.out.println("✅ PAGO APROBADO para cochera " + codigoCochera + " y patente " + patente);
+                        }
+                    }
+                }
+            }
+
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            System.err.println("❌ ERROR EN WEBHOOK: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

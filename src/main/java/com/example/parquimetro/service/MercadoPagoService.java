@@ -1,10 +1,9 @@
 package com.example.parquimetro.service;
 
-import com.mercadopago.MercadoPagoConfig;
 import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
 import com.mercadopago.client.preference.PreferenceClient;
 import com.mercadopago.client.preference.PreferenceItemRequest;
-import com.mercadopago.client.preference.PreferencePayerRequest; // 🚀 NUEVA IMPORTACIÓN (El Pagador)
+import com.mercadopago.client.preference.PreferencePayerRequest;
 import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.exceptions.MPApiException;
 import com.mercadopago.exceptions.MPException;
@@ -12,31 +11,20 @@ import com.mercadopago.resources.preference.Preference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.Collections;
 
 @Service
 public class MercadoPagoService {
 
-    @Value("${mercadopago.access.token}")
-    private String accessToken;
-
-    // Inyectamos la URL dinámica para soportar Ngrok o Localhost
+    // Ya no inyectamos el Token aquí, de eso se encarga MpConfig.java
+    
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    @PostConstruct
-    public void init() {
-        try {
-            MercadoPagoConfig.setAccessToken(accessToken);
-            System.out.println("✅ SERVICIO MP: Listo. Frontend enrutado a: " + frontendUrl);
-        } catch (Exception e) {
-            System.err.println("❌ Error al cargar token MP: " + e.getMessage());
-        }
-    }
+    @Value("${app.backend.url:http://localhost:8080}")
+    private String backendUrl;
 
-    // 🚀 CORRECCIÓN: Agregamos "String email" como parámetro obligatorio
     public String crearPreferenciaPago(String cocheraCodigo, BigDecimal tarifa, String referenciaExterna, String email) {
         try {
             PreferenceItemRequest itemRequest = PreferenceItemRequest.builder()
@@ -46,12 +34,10 @@ public class MercadoPagoService {
                     .currencyId("ARS")
                     .build();
 
-            // 🚀 NUEVO: Construimos el objeto del pagador con el email simulado desde React
             PreferencePayerRequest payerRequest = PreferencePayerRequest.builder()
                     .email(email)
                     .build();
 
-            // Usamos la variable dinámica
             PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
                     .success(frontendUrl + "/pago-exitoso")
                     .pending(frontendUrl + "/pago-pendiente")
@@ -60,20 +46,19 @@ public class MercadoPagoService {
 
             PreferenceRequest requestBuilder = PreferenceRequest.builder()
                     .items(Collections.singletonList(itemRequest))
-                    .payer(payerRequest) // 🚀 VINCULAMOS EL PAGADOR AQUÍ PARA EVITAR EL RECHAZO
+                    .payer(payerRequest) 
                     .autoReturn("approved")
                     .externalReference(referenciaExterna)
                     .backUrls(backUrls)
+                    .notificationUrl(backendUrl + "/api/mercado-pago/webhook")
                     .build();
 
             PreferenceClient client = new PreferenceClient();
             Preference preference = client.create(requestBuilder);
 
-            // 🚀 CAMBIO VITAL PARA REACT (OPCIÓN A): Devolvemos el ID, no el InitPoint
             return preference.getId();
 
         } catch (MPApiException apiException) {
-            // Diagnóstico avanzado que captura el estado exacto de MP
             int statusCode = apiException.getApiResponse().getStatusCode();
             String content = apiException.getApiResponse().getContent();
             
