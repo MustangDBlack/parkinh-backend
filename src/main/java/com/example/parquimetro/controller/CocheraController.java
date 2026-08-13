@@ -16,7 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 @RestController
-@CrossOrigin(origins = "*")
+// 🚀 CAMBIO VITAL: Reemplazamos el "*" por los dominios permitidos y habilitamos credenciales
+@CrossOrigin(origins = {"https://parkinh.blackkode.com.ar", "http://localhost:5173"}, allowCredentials = "true")
 @RequestMapping("/api/cocheras")
 public class CocheraController {
 
@@ -48,7 +49,7 @@ public class CocheraController {
             @RequestParam String tipoPase,
             @RequestParam String turno,
             @RequestParam BigDecimal monto, 
-            @RequestParam(required = false, defaultValue = "TRANSFERENCIA") String metodoPago, // 🚀 CAMBIO AQUÍ: Por defecto es TRANSFERENCIA
+            @RequestParam(required = false, defaultValue = "TRANSFERENCIA") String metodoPago,
             @RequestParam(required = false) String username) { 
         
         Cochera cochera = service.obtenerPorCodigo(codigo); 
@@ -58,7 +59,7 @@ public class CocheraController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cochera " + codigo + " ya se encuentra ocupada.");
         }
 
-        // 🚀 2. BLINDAJE BACKEND: Un usuario activo, un solo lugar activo + Candado Anti-Morosos
+        // 2. BLINDAJE BACKEND: Un usuario activo, un solo lugar activo + Candado Anti-Morosos
         if (username != null && !username.trim().isEmpty()) {
             Optional<Usuario> userOpt = usuarioRepository.findByUsername(username);
             if (userOpt.isPresent()) {
@@ -69,7 +70,7 @@ public class CocheraController {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El usuario ya tiene un lugar asignado. Debe liberar su espacio actual antes de ocupar otro.");
                 }
 
-                // 🚀 NUEVO CANDADO ANTI-DEUDAS: Si debe dinero, se rechaza el acceso
+                // CANDADO ANTI-DEUDAS: Si debe dinero, se rechaza el acceso
                 if (reservaService.tieneDeudaPendiente(usuario.getUsername())) {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "ACCESO DENEGADO: Tienes una deuda pendiente por tiempo excedido. Debes abonarla para volver a utilizar el estacionamiento.");
                 }
@@ -97,7 +98,6 @@ public class CocheraController {
         return reservaService.crearReserva(nuevaReserva);
     }
 
-    // 🚀 Interceptamos el null del servicio y respondemos de forma amigable
     @PostMapping("/{codigo}/salida")
     public Reserva registrarSalida(@PathVariable String codigo) {
         Reserva reserva = reservaService.finalizarReservaPorCocheraCodigo(codigo);

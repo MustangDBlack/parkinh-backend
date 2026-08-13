@@ -19,7 +19,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/reservas")
-@CrossOrigin(origins = "*")
+// 🚀 CAMBIO VITAL: Reemplazamos el "*" por los dominios permitidos
+@CrossOrigin(origins = {"https://parkinh.blackkode.com.ar", "http://localhost:5173"}, allowCredentials = "true")
 public class ReservaController {
 
     private final ReservaRepository repository;
@@ -31,6 +32,7 @@ public class ReservaController {
     public ReservaController(ReservaRepository repository, ReservaService service) {
         this.repository = repository;
         this.service = service;
+        // Ojo aquí: Este token quemado deberías pasarlo a variable de entorno luego
         MercadoPagoConfig.setAccessToken("APP_USR-7c349921-cc5a-4fdd-822f-1098451bef56");
     }
 
@@ -45,7 +47,7 @@ public class ReservaController {
     }
 
     /**
-     * 🚀 CORREGIDO: Calcula la multa de forma exponencial ($200, $400, $800, $1600...)
+     * Calcula la multa de forma exponencial ($200, $400, $800, $1600...)
      * y genera la orden de pago en Mercado Pago desglosando la multa y la estadía.
      */
     @PutMapping("/{id}/pagar-deuda")

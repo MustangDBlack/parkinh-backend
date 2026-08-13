@@ -7,7 +7,8 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/usuarios")
-@CrossOrigin(origins = "*")
+// 🚀 CAMBIO VITAL: Reemplazamos el "*" por los dominios exactos y permitimos credenciales
+@CrossOrigin(origins = {"https://parkinh.blackkode.com.ar", "http://localhost:5173"}, allowCredentials = "true")
 public class UsuarioController {
 
     private final UsuarioService service;

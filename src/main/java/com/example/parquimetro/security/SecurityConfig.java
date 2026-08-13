@@ -1,21 +1,22 @@
 package com.example.parquimetro.security;
 
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
-import java.util.List;
+import java.util.Arrays;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
@@ -26,45 +27,45 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            // 1. Activa CORS buscando automáticamente el bean corsConfigurationSource
+            .cors(Customizer.withDefaults())
+            // 2. Desactiva CSRF (necesario para APIs REST)
             .csrf(csrf -> csrf.disable())
-            .cors(cors -> {}) // Delegado por completo al CorsFilter de máxima prioridad
             .authorizeHttpRequests(auth -> auth
-                // Permitir sin restricciones todas las peticiones OPTIONS (Preflight)
+                // 3. Permite todas las peticiones OPTIONS de forma global
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                
-                // Rutas públicas del sistema
+                // 4. Rutas públicas
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
-                
-                // Todo lo demás requiere autenticación
+                // 5. Todo lo demás protegido
                 .anyRequest().authenticated()
             );
         return http.build();
     }
 
     @Bean
-    public FilterRegistrationBean<CorsFilter> corsFilterRegistration() {
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        CorsConfiguration config = new CorsConfiguration();
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
         
-        // 🚀 USO DE PATRONES: Esencial en Spring Boot 3 para evitar bloqueos con credenciales
-        config.setAllowedOriginPatterns(List.of(
+        // Orígenes exactos
+        configuration.setAllowedOrigins(Arrays.asList(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
         ));
         
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L); // Cachea la respuesta preflight por 1 hora
+        // Métodos explícitos
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
+        
+        // Cabeceras (Agregamos explícitamente las que React suele enviar)
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"
+        ));
+        
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L); // Cachea la respuesta preflight 1 hora
 
-        source.registerCorsConfiguration("/**", config);
-        
-        CorsFilter corsFilter = new CorsFilter(source);
-        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(corsFilter);
-        
-        // Máxima prioridad para interceptar el tráfico antes de cualquier filtro de seguridad
-        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        return bean;
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }

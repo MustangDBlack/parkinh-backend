@@ -19,7 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@CrossOrigin(origins = "*") 
+// 🚀 CAMBIO VITAL: Reemplazamos el "*" por los dominios permitidos y habilitamos credenciales
+@CrossOrigin(origins = {"https://parkinh.blackkode.com.ar", "http://localhost:5173"}, allowCredentials = "true")
 @RequestMapping("/api/mercado-pago")
 public class MercadoPagoController {
 
