@@ -27,16 +27,16 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(cors -> {}) // Delegado al CorsFilter de máxima prioridad
+            .cors(cors -> {}) // Delegado por completo al CorsFilter de máxima prioridad
             .authorizeHttpRequests(auth -> auth
-                // Permitir explícitamente todas las peticiones OPTIONS (Preflight de CORS)
+                // Permitir sin restricciones todas las peticiones OPTIONS (Preflight)
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // Rutas públicas de la API
+                // Rutas públicas del sistema
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
                 
-                // Todo lo demás exige autenticación
+                // Todo lo demás requiere autenticación
                 .anyRequest().authenticated()
             );
         return http.build();
@@ -47,22 +47,23 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
         
-        // Dominios permitidos (Producción y Local)
-        config.setAllowedOrigins(List.of(
+        // 🚀 USO DE PATRONES: Esencial en Spring Boot 3 para evitar bloqueos con credenciales
+        config.setAllowedOriginPatterns(List.of(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
         ));
         
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L); // Cachea la respuesta preflight por 1 hora
 
         source.registerCorsConfiguration("/**", config);
         
         CorsFilter corsFilter = new CorsFilter(source);
         FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(corsFilter);
         
-        // 🚀 MÁXIMA PRIORIDAD: Se ejecuta antes que cualquier seguridad o filtro del sistema
+        // Máxima prioridad para interceptar el tráfico antes de cualquier filtro de seguridad
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
     }
