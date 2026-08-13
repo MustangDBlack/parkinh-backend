@@ -34,10 +34,15 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 3. Permite todas las peticiones OPTIONS de forma global
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // 4. Rutas públicas
+                
+                // 4. Rutas públicas de usuarios y webhooks
                 .requestMatchers("/api/usuarios/registro", "/api/usuarios/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/mercado-pago/webhook").permitAll()
-                // 5. Todo lo demás protegido
+                
+                // 🚀 5. Permitir que cualquiera pueda ver el mapa de cocheras (Evita el error 403)
+                .requestMatchers(HttpMethod.GET, "/api/cocheras").permitAll()
+                
+                // 6. Todo lo demás protegido
                 .anyRequest().authenticated()
             );
         return http.build();
