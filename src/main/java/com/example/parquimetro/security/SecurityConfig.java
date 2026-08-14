@@ -36,16 +36,16 @@ public class SecurityConfig {
                 // 2. Rutas públicas de usuarios y webhooks
                 .requestMatchers("/api/usuarios/**").permitAll()
                 
-                // 3. Rutas de cocheras (Lectura y operaciones de entrada/salida)
+                // 3. Rutas de cocheras
                 .requestMatchers("/api/cocheras/**").permitAll()
                 
-                // 4. Rutas de reservas e historial (Para que el frontend pueda consultarlas)
+                // 4. Rutas de reservas e historial
                 .requestMatchers("/api/reservas/**").permitAll()
                 
                 // 5. Rutas de pagos y pasarela digital de Mercado Pago
                 .requestMatchers("/api/mercado-pago/**").permitAll()
                 
-                // 6. Cualquier otra cosa por si acaso
+                // 6. Cualquier otra solicitud
                 .anyRequest().permitAll()
             );
         return http.build();
@@ -55,7 +55,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        configuration.setAllowedOrigins(Arrays.asList(
+        // Uso de patrones para compatibilidad óptima con credenciales
+        configuration.setAllowedOriginPatterns(Arrays.asList(
             "https://parkinh.blackkode.com.ar",
             "http://localhost:5173"
         ));
