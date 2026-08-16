@@ -90,41 +90,61 @@ public class MercadoPagoController {
     }
 
     /**
-     * 🚀 WEBHOOK REAL: Recibe las notificaciones de Mercado Pago cuando el pago se aprueba
+     * 🚀 WEBHOOK REAL: Recibe las notificaciones de Mercado Pago cuando el pago se aprueba.
+     * 
+     * Mercado Pago envía las notificaciones de DOS formas:
+     * 1. Formato antiguo (query params): GET /webhook?topic=payment&id=123456
+     * 2. Formato nuevo (JSON body): POST /webhook con body {"type":"payment","data":{"id":"123456"}}
+     * 
+     * Este método maneja AMBOS formatos para evitar errores 400.
      */
-    @PostMapping("/webhook")
+    @RequestMapping(value = "/webhook", method = {RequestMethod.GET, RequestMethod.POST})
     @Transactional
-    public ResponseEntity<?> recibirNotificacionPago(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<?> recibirNotificacionPago(
+            @RequestParam(required = false) String topic,
+            @RequestParam(required = false) String id,
+            @RequestBody(required = false) Map<String, Object> payload) {
         try {
-            System.out.println("🔔 WEBHOOK RECIBIDO DESDE MERCADO PAGO: " + payload);
+            System.out.println("🔔 WEBHOOK RECIBIDO DESDE MERCADO PAGO - topic: " + topic + ", id: " + id + ", payload: " + payload);
 
-            String type = (String) payload.get("type");
-            if ("payment".equals(type)) {
-                Map<String, Object> data = (Map<String, Object>) payload.get("data");
-                if (data != null && data.containsKey("id")) {
-                    Long paymentId = Long.valueOf(data.get("id").toString());
+            Long paymentId = null;
 
-                    // Consultamos los detalles del pago directamente a la API de Mercado Pago
-                    PaymentClient paymentClient = new PaymentClient();
-                    Payment payment = paymentClient.get(paymentId);
+            // Formato 1: Query params (?topic=payment&id=123456)
+            if (id != null && !id.isEmpty()) {
+                paymentId = Long.valueOf(id);
+            }
+            // Formato 2: JSON body ({"type":"payment","data":{"id":"123456"}})
+            else if (payload != null && payload.containsKey("type")) {
+                String type = (String) payload.get("type");
+                if ("payment".equals(type)) {
+                    Map<String, Object> data = (Map<String, Object>) payload.get("data");
+                    if (data != null && data.containsKey("id")) {
+                        paymentId = Long.valueOf(data.get("id").toString());
+                    }
+                }
+            }
 
-                    if ("approved".equals(payment.getStatus())) {
-                        String externalReference = payment.getExternalReference(); // Ej: "A1_AB123CD"
-                        
-                        if (externalReference != null && externalReference.contains("_")) {
-                            String[] partes = externalReference.split("_");
-                            String codigoCochera = partes[0];
-                            String patente = partes[1];
+            if (paymentId != null) {
+                // Consultamos los detalles del pago directamente a la API de Mercado Pago
+                PaymentClient paymentClient = new PaymentClient();
+                Payment payment = paymentClient.get(paymentId);
 
-                            // Ocupamos la cochera físicamente y actualizamos el estado del pago
-                            Cochera cochera = cocheraService.obtenerPorCodigo(codigoCochera);
-                            if (cochera != null) {
-                                cochera.setOcupado(true);
-                                cocheraService.crearCochera(cochera);
-                            }
+                if ("approved".equals(payment.getStatus())) {
+                    String externalReference = payment.getExternalReference(); // Ej: "A1_AB123CD"
+                    
+                    if (externalReference != null && externalReference.contains("_")) {
+                        String[] partes = externalReference.split("_");
+                        String codigoCochera = partes[0];
+                        String patente = partes[1];
 
-                            System.out.println("✅ PAGO APROBADO para cochera " + codigoCochera + " y patente " + patente);
+                        // Ocupamos la cochera físicamente y actualizamos el estado del pago
+                        Cochera cochera = cocheraService.obtenerPorCodigo(codigoCochera);
+                        if (cochera != null) {
+                            cochera.setOcupado(true);
+                            cocheraService.crearCochera(cochera);
                         }
+
+                        System.out.println("✅ PAGO APROBADO para cochera " + codigoCochera + " y patente " + patente);
                     }
                 }
             }
