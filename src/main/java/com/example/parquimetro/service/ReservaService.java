@@ -67,6 +67,15 @@ public class ReservaService {
     }
 
     @Transactional
+    public Reserva confirmarPagoDeuda(Long reservaId) {
+        Reserva reserva = reservaRepository.findById(reservaId)
+                .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
+
+        reserva.setEstadoPago("PAGADO");
+        return reservaRepository.save(reserva);
+    }
+
+    @Transactional
     public Reserva extenderReserva(Long reservaId, int horasACargar) {
         Reserva reserva = reservaRepository.findById(reservaId)
                 .orElseThrow(() -> new RuntimeException("Reserva activa no encontrada"));

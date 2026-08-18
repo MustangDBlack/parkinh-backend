@@ -39,9 +39,9 @@ public class MercadoPagoService {
                     .build();
 
             PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
-                    .success(frontendUrl + "/pago-exitoso")
-                    .pending(frontendUrl + "/pago-pendiente")
-                    .failure(frontendUrl + "/pago-fallido")
+                    .success("https://parkinh.blackkode.com.ar/pago-exitoso")
+                    .pending("https://parkinh.blackkode.com.ar/pago-pendiente")
+                    .failure("https://parkinh.blackkode.com.ar/pago-fallido")
                     .build();
 
             PreferenceRequest requestBuilder = PreferenceRequest.builder()

@@ -166,4 +166,13 @@ public class ReservaController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
+
+    @PutMapping("/{id}/confirmar-pago-deuda")
+    public Reserva confirmarPagoDeuda(@PathVariable Long id) {
+        try {
+            return service.confirmarPagoDeuda(id);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
 }
