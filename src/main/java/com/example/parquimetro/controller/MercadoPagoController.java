@@ -37,7 +37,7 @@ public class MercadoPagoController {
         this.usuarioRepository = usuarioRepository;
     }
 
-    @PostMapping(value = "/reservar-digital/{codigo}", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PostMapping(value = "/reservar-digital/{codigo}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Transactional 
     public ResponseEntity<String> reservarDigital(
             @PathVariable String codigo, 
@@ -81,7 +81,8 @@ public class MercadoPagoController {
             
             reservaService.crearReserva(nuevaReserva);
             
-            return ResponseEntity.ok(idPreferencia);
+            // 🚀 CORREGIDO: Devolvemos JSON con preferenceId para que el frontend lo lea como data.preferenceId
+            return ResponseEntity.ok("{\"preferenceId\":\"" + idPreferencia + "\"}");
 
         } catch (Exception e) {
             System.err.println("❌ ERROR AL CREAR PREFERENCIA: " + e.getMessage());
